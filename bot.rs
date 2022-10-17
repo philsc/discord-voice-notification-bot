@@ -8,18 +8,41 @@ use serenity::model::voice::VoiceState;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{StandardFramework, CommandResult};
 
-#[group]
-#[commands(ping)]
-struct General;
-
 #[derive(Default)]
-struct Handler {
+struct BotState {
     voice_active: bool,
+    channel_id: Option<ChannelId>,
 }
+
+struct BotStateKey;
+
+impl TypeMapKey for BotStateKey {
+    type Value = BotState;
+}
+
+struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
+    async fn message(&self, ctx: Context, msg: Message) {
+        if msg.content != "~voice_notify" {
+            return;
+        }
+
+        let mut data = ctx.data.write().await;
+        let bot_state = data.get_mut::<BotStateKey>().unwrap();
+        bot_state.channel_id = Some(msg.channel_id);
+
+        msg.reply(&ctx, "Bot will now announce voice events to this channel!").await;
+    }
+
     async fn voice_state_update(&self, ctx: Context, old: Option<VoiceState>, new: VoiceState) {
+        let mut data = ctx.data.write().await;
+        let bot_state = data.get_mut::<BotStateKey>().unwrap();
+        if bot_state.channel_id.is_none() {
+            return;
+        }
+
         let id = match new.channel_id {
             None => return,
             Some(id) => id,
@@ -40,32 +63,34 @@ impl EventHandler for Handler {
         }
         println!("Got event for channel called \"{}\"", guild_channel.name());
 
-        let member_count = match guild_channel.member_count {
-            Some(count) => count,
-            _ => {
-                println!("No member_count!");
+        let member_count = match guild_channel.members(&ctx).await {
+            Ok(members) => members.len(),
+            Err(why) => {
+                println!("Failed to get member count: {:?}", why);
                 return;
             },
         };
 
-        if member_count > 0 && !self.voice_active {
-            //self.voice_active = true;
+        if member_count > 0 && !bot_state.voice_active {
+            bot_state.voice_active = true;
+            bot_state.channel_id.unwrap().send_message(&ctx, |m| {
+                m.content("Someone joined a voice channel.")
+            }).await;
         }
     }
 }
 
 #[tokio::main]
 async fn main() {
-    let framework = StandardFramework::new()
-        .configure(|c| c.prefix("~")) // set the bot's prefix to "~"
-        .group(&GENERAL_GROUP);
+	let framework = StandardFramework::new();
 
     // Login with a bot token from the environment
     let token = env::var("DISCORD_TOKEN").expect("token");
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
     let mut client = Client::builder(token, intents)
-        .event_handler(Handler::default())
+        .event_handler(Handler)
         .framework(framework)
+        .type_map_insert::<BotStateKey>(BotState::default())
         .await
         .expect("Error creating client");
 
@@ -81,11 +106,4 @@ async fn main() {
     }
 
     println!("Bot has shut down.");
-}
-
-#[command]
-async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, "Pong!").await?;
-
-    Ok(())
 }
