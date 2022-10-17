@@ -22,7 +22,7 @@ impl TypeMapKey for BotStateKey {
 
 struct Handler;
 
-async fn get_channel_member_count(ctx: &Context, voice_state: &VoiceState) -> Option<usize> {
+async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(ChannelId, usize)> {
     let id = voice_state.channel_id?;
 
     let channel = id.to_channel(ctx).await.or_else(|why| {
@@ -51,7 +51,7 @@ async fn get_channel_member_count(ctx: &Context, voice_state: &VoiceState) -> Op
         },
     };
 
-    Some(member_count)
+    Some((id, member_count))
 }
 
 #[async_trait]
@@ -76,21 +76,16 @@ impl EventHandler for Handler {
             return;
         }
 
-        let member_count = get_channel_member_count(&ctx, &new).await.unwrap_or(0);
-
-        let old_member_count = match old {
-            None => 0,
-            Some(voice_state) => get_channel_member_count(&ctx, &voice_state).await.unwrap_or(0),
-        };
-
-        println!("member_count: {}  old_member_count: {}", member_count, old_member_count);
+        let info = get_channel_info(&ctx, &new).await;
+        let (voice_channel_id, member_count) = info.unwrap_or((ChannelId::default(), 0));
 
         if member_count == 0 {
             bot_state.voice_active = false;
         } else if !bot_state.voice_active {
             bot_state.voice_active = true;
+            let name = voice_channel_id.name(&ctx).await.unwrap_or("<unknown>".to_owned());
             bot_state.channel_id.unwrap().send_message(&ctx, |m| {
-                m.content("Someone joined a voice channel.")
+                m.content(format!("Someone joined the \"{}\" voice channel.", name))
             }).await;
         }
     }
