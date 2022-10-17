@@ -22,6 +22,34 @@ impl TypeMapKey for BotStateKey {
 
 struct Handler;
 
+async fn get_channel_member_count(ctx: &Context, voice_state: &VoiceState) -> Option<usize> {
+    let id = voice_state.channel_id?;
+
+    let channel = id.to_channel(ctx).await.or_else(|why| {
+        println!("Failed to get channel: {:?}", why);
+        Err(why)
+    }).ok()?;
+
+    let guild_channel = match channel {
+        Channel::Guild(guild_channel) => guild_channel,
+        _ => return None,
+    };
+    if guild_channel.kind != ChannelType::Voice {
+        return None;
+    }
+    println!("Got event for channel called \"{}\"", guild_channel.name());
+
+    let member_count = match guild_channel.members(&ctx).await {
+        Ok(members) => members.len(),
+        Err(why) => {
+            println!("Failed to get member count: {:?}", why);
+            return None;
+        },
+    };
+
+    Some(member_count)
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
@@ -43,32 +71,9 @@ impl EventHandler for Handler {
             return;
         }
 
-        let id = match new.channel_id {
+        let member_count = match get_channel_member_count(&ctx, &new).await {
             None => return,
-            Some(id) => id,
-        };
-        let channel = match id.to_channel(&ctx).await {
-            Err(why) => {
-                println!("Failed to get channel: {:?}", why);
-                return;
-            },
-            Ok(channel) => channel,
-        };
-        let guild_channel = match channel {
-            Channel::Guild(guild_channel) => guild_channel,
-            _ => return,
-        };
-        if guild_channel.kind != ChannelType::Voice {
-            return;
-        }
-        println!("Got event for channel called \"{}\"", guild_channel.name());
-
-        let member_count = match guild_channel.members(&ctx).await {
-            Ok(members) => members.len(),
-            Err(why) => {
-                println!("Failed to get member count: {:?}", why);
-                return;
-            },
+            Some(count) => count,
         };
 
         if member_count > 0 && !bot_state.voice_active {
