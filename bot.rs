@@ -32,9 +32,13 @@ async fn get_channel_member_count(ctx: &Context, voice_state: &VoiceState) -> Op
 
     let guild_channel = match channel {
         Channel::Guild(guild_channel) => guild_channel,
-        _ => return None,
+        _ => {
+            println!("Got something other than a guild channel");
+            return None
+        },
     };
     if guild_channel.kind != ChannelType::Voice {
+        println!("Got something other than a voice channel");
         return None;
     }
     println!("Got event for channel called \"{}\"", guild_channel.name());
@@ -68,15 +72,22 @@ impl EventHandler for Handler {
         let mut data = ctx.data.write().await;
         let bot_state = data.get_mut::<BotStateKey>().unwrap();
         if bot_state.channel_id.is_none() {
+            println!("Ignoring channel event because we didn't receive voice command.");
             return;
         }
 
-        let member_count = match get_channel_member_count(&ctx, &new).await {
-            None => return,
-            Some(count) => count,
+        let member_count = get_channel_member_count(&ctx, &new).await.unwrap_or(0);
+
+        let old_member_count = match old {
+            None => 0,
+            Some(voice_state) => get_channel_member_count(&ctx, &voice_state).await.unwrap_or(0),
         };
 
-        if member_count > 0 && !bot_state.voice_active {
+        println!("member_count: {}  old_member_count: {}", member_count, old_member_count);
+
+        if member_count == 0 {
+            bot_state.voice_active = false;
+        } else if !bot_state.voice_active {
             bot_state.voice_active = true;
             bot_state.channel_id.unwrap().send_message(&ctx, |m| {
                 m.content("Someone joined a voice channel.")
