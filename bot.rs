@@ -6,6 +6,7 @@ use serenity::model::channel::{Channel, ChannelType, Message};
 use serenity::model::id::ChannelId;
 use serenity::model::voice::VoiceState;
 use serenity::prelude::*;
+use tokio::signal::unix::{signal, SignalKind};
 
 // The bot's internal state.
 #[derive(Default)]
@@ -134,7 +135,14 @@ async fn main() {
     // Deal with shutdown signals like CTRL-C cleanly.
     let shard_manager = client.shard_manager.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.unwrap();
+        let mut hangup_stream = signal(SignalKind::hangup()).unwrap();
+        let mut interrupt_stream = signal(SignalKind::interrupt()).unwrap();
+        let mut terminate_stream = signal(SignalKind::terminate()).unwrap();
+        tokio::select! {
+            _ = hangup_stream.recv() => println!("HUP"),
+            _ = interrupt_stream.recv() => println!("INT"),
+            _ = terminate_stream.recv() => println!("TERM"),
+        }
         shard_manager.lock().await.shutdown_all().await;
     });
 
