@@ -139,10 +139,11 @@ async fn main() {
         let mut interrupt_stream = signal(SignalKind::interrupt()).unwrap();
         let mut terminate_stream = signal(SignalKind::terminate()).unwrap();
         tokio::select! {
-            _ = hangup_stream.recv() => println!("HUP"),
-            _ = interrupt_stream.recv() => println!("INT"),
-            _ = terminate_stream.recv() => println!("TERM"),
+            _ = hangup_stream.recv() => (),
+            _ = interrupt_stream.recv() => (),
+            _ = terminate_stream.recv() => (),
         }
+        println!("Received shutdown signal.");
         shard_manager.lock().await.shutdown_all().await;
     });
 
