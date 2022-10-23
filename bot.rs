@@ -1,12 +1,12 @@
 use std::env;
 
 use serenity::async_trait;
-use serenity::prelude::*;
+use serenity::framework::standard::macros::{command, group};
+use serenity::framework::standard::{CommandResult, StandardFramework};
 use serenity::model::channel::{Channel, ChannelType, Message};
 use serenity::model::id::ChannelId;
 use serenity::model::voice::VoiceState;
-use serenity::framework::standard::macros::{command, group};
-use serenity::framework::standard::{StandardFramework, CommandResult};
+use serenity::prelude::*;
 
 #[derive(Default)]
 struct BotState {
@@ -25,17 +25,21 @@ struct Handler;
 async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(ChannelId, usize)> {
     let id = voice_state.channel_id?;
 
-    let channel = id.to_channel(ctx).await.or_else(|why| {
-        println!("Failed to get channel: {:?}", why);
-        Err(why)
-    }).ok()?;
+    let channel = id
+        .to_channel(ctx)
+        .await
+        .or_else(|why| {
+            println!("Failed to get channel: {:?}", why);
+            Err(why)
+        })
+        .ok()?;
 
     let guild_channel = match channel {
         Channel::Guild(guild_channel) => guild_channel,
         _ => {
             println!("Got something other than a guild channel");
-            return None
-        },
+            return None;
+        }
     };
     if guild_channel.kind != ChannelType::Voice {
         println!("Got something other than a voice channel");
@@ -48,7 +52,7 @@ async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(Ch
         Err(why) => {
             println!("Failed to get member count: {:?}", why);
             return None;
-        },
+        }
     };
 
     Some((id, member_count))
@@ -66,7 +70,8 @@ impl EventHandler for Handler {
         let bot_state = data.get_mut::<BotStateKey>().unwrap();
         bot_state.channel_id = Some(msg.channel_id);
 
-        msg.reply(&ctx, "Bot will now announce voice events to this channel!").await;
+        msg.reply(&ctx, "Bot will now announce voice events to this channel!")
+            .await;
     }
 
     // Announce the first time someone joins a voice channel. When subsequent folks join, there is
@@ -88,17 +93,24 @@ impl EventHandler for Handler {
         } else if !bot_state.voice_active {
             // Someone joined the voice channel for the first time. Let folks know.
             bot_state.voice_active = true;
-            let name = voice_channel_id.name(&ctx).await.unwrap_or("<unknown>".to_owned());
-            bot_state.channel_id.unwrap().send_message(&ctx, |m| {
-                m.content(format!("Someone joined the \"{}\" voice channel.", name))
-            }).await;
+            let name = voice_channel_id
+                .name(&ctx)
+                .await
+                .unwrap_or("<unknown>".to_owned());
+            bot_state
+                .channel_id
+                .unwrap()
+                .send_message(&ctx, |m| {
+                    m.content(format!("Someone joined the \"{}\" voice channel.", name))
+                })
+                .await;
         }
     }
 }
 
 #[tokio::main]
 async fn main() {
-	let framework = StandardFramework::new();
+    let framework = StandardFramework::new();
 
     // Login with a bot token from the environment
     let token = env::var("DISCORD_TOKEN").expect("token");
