@@ -118,12 +118,32 @@ impl EventHandler for Handler {
     }
 }
 
+// Finds the discord token via the environment.
+//
+// First, it checks for the DISCORD_TOKEN variable. If that is empty or doesn't exist, then it
+// tries to read the token from the file specified via DISCORD_TOKEN_FILE.
+async fn get_discord_token() -> String {
+    let token = env::var("DISCORD_TOKEN").unwrap_or_else(|why| {
+        println!("Failed to read DISCORD_TOKEN: {:?}", why);
+        println!("Trying DISCORD_TOKEN_FILE.");
+        "".to_owned()
+    });
+    if !token.is_empty() {
+        return token;
+    }
+    let token_file = env::var("DISCORD_TOKEN_FILE").expect("Could not read DISCORD_TOKEN_FILE");
+    let contents = tokio::fs::read_to_string(&token_file).await.unwrap_or_else(|why| {
+        panic!("Failed to read {}: {:?}", token_file.as_str(), why);
+    });
+    contents
+}
+
 #[tokio::main]
 async fn main() {
     let framework = StandardFramework::new();
 
     // Log in with a bot token from the environment.
-    let token = env::var("DISCORD_TOKEN").expect("token");
+    let token = get_discord_token().await;
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
     let mut client = Client::builder(token, intents)
         .event_handler(Handler)
@@ -148,6 +168,7 @@ async fn main() {
     });
 
     // Start listening for events by starting a single shard.
+    println!("Starting bot.");
     if let Err(why) = client.start().await {
         println!("An error occurred while running the client: {:?}", why);
     }
