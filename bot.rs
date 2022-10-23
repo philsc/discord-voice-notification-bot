@@ -66,6 +66,11 @@ async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(Ch
     Some((id, member_count))
 }
 
+async fn get_state(ctx: & mut Context) -> & mut BotState {
+    let mut data = ctx.data.write().await;
+    return data.get_mut::<BotStateKey>().unwrap();
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     // When the user types "~voice_notify", start announcing on the corresponding channel.
@@ -74,8 +79,7 @@ impl EventHandler for Handler {
             return;
         }
 
-        let mut data = ctx.data.write().await;
-        let bot_state = data.get_mut::<BotStateKey>().unwrap();
+        let bot_state = get_state(& mut ctx).await;
         bot_state.channel_id = Some(msg.channel_id);
 
         msg.reply(&ctx, "Bot will now announce voice events to this channel!")
@@ -86,8 +90,7 @@ impl EventHandler for Handler {
     // Announce the first time someone joins a voice channel. When subsequent folks join, there is
     // no announcement.
     async fn voice_state_update(&self, ctx: Context, _old: Option<VoiceState>, new: VoiceState) {
-        let mut data = ctx.data.write().await;
-        let bot_state = data.get_mut::<BotStateKey>().unwrap();
+        let bot_state = get_state(& mut ctx).await;
         if bot_state.channel_id.is_none() {
             println!("Ignoring channel event because we didn't receive \"~voice_notify\" command.");
             return;
