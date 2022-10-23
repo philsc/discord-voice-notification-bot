@@ -1,13 +1,13 @@
 use std::env;
 
 use serenity::async_trait;
-use serenity::framework::standard::macros::{command, group};
-use serenity::framework::standard::{CommandResult, StandardFramework};
+use serenity::framework::standard::StandardFramework;
 use serenity::model::channel::{Channel, ChannelType, Message};
 use serenity::model::id::ChannelId;
 use serenity::model::voice::VoiceState;
 use serenity::prelude::*;
 
+// The bot's internal state.
 #[derive(Default)]
 struct BotState {
     voice_active: bool,
@@ -16,15 +16,20 @@ struct BotState {
 
 struct BotStateKey;
 
+// Wrapper type so we can save BotState in serenity's context.
 impl TypeMapKey for BotStateKey {
     type Value = BotState;
 }
 
 struct Handler;
 
+// Gets information about the specified voice channel.
+//
+// Returns the channel ID as well as the number of people in that channel.
 async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(ChannelId, usize)> {
     let id = voice_state.channel_id?;
 
+    // Convert "ChannelId" to a "Channel".
     let channel = id
         .to_channel(ctx)
         .await
@@ -34,6 +39,7 @@ async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(Ch
         })
         .ok()?;
 
+    // Ignore all channels other than voice channels.
     let guild_channel = match channel {
         Channel::Guild(guild_channel) => guild_channel,
         _ => {
@@ -47,6 +53,7 @@ async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(Ch
     }
     println!("Got event for channel called \"{}\"", guild_channel.name());
 
+    // Find out how many folks are in that voice channel.
     let member_count = match guild_channel.members(&ctx).await {
         Ok(members) => members.len(),
         Err(why) => {
@@ -112,7 +119,7 @@ impl EventHandler for Handler {
 async fn main() {
     let framework = StandardFramework::new();
 
-    // Login with a bot token from the environment
+    // Log in with a bot token from the environment.
     let token = env::var("DISCORD_TOKEN").expect("token");
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
     let mut client = Client::builder(token, intents)
@@ -122,6 +129,7 @@ async fn main() {
         .await
         .expect("Error creating client");
 
+    // Deal with shutdown signals like CTRL-C cleanly.
     let shard_manager = client.shard_manager.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.unwrap();
