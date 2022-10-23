@@ -78,12 +78,13 @@ impl EventHandler for Handler {
         bot_state.channel_id = Some(msg.channel_id);
 
         msg.reply(&ctx, "Bot will now announce voice events to this channel!")
-            .await;
+            .await
+            .unwrap();
     }
 
     // Announce the first time someone joins a voice channel. When subsequent folks join, there is
     // no announcement.
-    async fn voice_state_update(&self, ctx: Context, old: Option<VoiceState>, new: VoiceState) {
+    async fn voice_state_update(&self, ctx: Context, _old: Option<VoiceState>, new: VoiceState) {
         let mut data = ctx.data.write().await;
         let bot_state = data.get_mut::<BotStateKey>().unwrap();
         if bot_state.channel_id.is_none() {
@@ -110,7 +111,8 @@ impl EventHandler for Handler {
                 .send_message(&ctx, |m| {
                     m.content(format!("Someone joined the \"{}\" voice channel.", name))
                 })
-                .await;
+                .await
+                .unwrap();
         }
     }
 }
