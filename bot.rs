@@ -41,12 +41,9 @@ async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(Ch
         .ok()?;
 
     // Ignore all channels other than voice channels.
-    let guild_channel = match channel {
-        Channel::Guild(guild_channel) => guild_channel,
-        _ => {
-            println!("Got something other than a guild channel");
-            return None;
-        }
+    let Channel::Guild(guild_channel) = channel else {
+        println!("Got something other than a guild channel");
+        return None;
     };
     if guild_channel.kind != ChannelType::Voice {
         println!("Got something other than a voice channel");
@@ -55,15 +52,16 @@ async fn get_channel_info(ctx: &Context, voice_state: &VoiceState) -> Option<(Ch
     println!("Got event for channel called \"{}\"", guild_channel.name());
 
     // Find out how many folks are in that voice channel.
-    let member_count = match guild_channel.members(&ctx).await {
-        Ok(members) => members.len(),
-        Err(why) => {
+    let members = guild_channel
+        .members(&ctx)
+        .await
+        .or_else(|why| {
             println!("Failed to get member count: {:?}", why);
-            return None;
-        }
-    };
+            return Err(why);
+        })
+        .ok()?;
 
-    Some((id, member_count))
+    Some((id, members.len()))
 }
 
 #[async_trait]
@@ -132,9 +130,11 @@ async fn get_discord_token() -> String {
         return token;
     }
     let token_file = env::var("DISCORD_TOKEN_FILE").expect("Could not read DISCORD_TOKEN_FILE");
-    let contents = tokio::fs::read_to_string(&token_file).await.unwrap_or_else(|why| {
-        panic!("Failed to read {}: {:?}", token_file.as_str(), why);
-    });
+    let contents = tokio::fs::read_to_string(&token_file)
+        .await
+        .unwrap_or_else(|why| {
+            panic!("Failed to read {}: {:?}", token_file.as_str(), why);
+        });
     contents
 }
 
